@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+  <meta charset="UTF-8">
+  <title>Diwali Reel Animation</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.8)); }
+      50% { opacity: 1; filter: drop-shadow(0 0 25px rgba(255, 140, 0, 1)); }
+    }
+    .glow-effect {
+      animation: pulse-glow 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-2 sm:p-4">
+  <div class="max-w-md mx-auto bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col items-center">
+    
+    <!-- Header -->
+    <div class="w-full flex items-center justify-between mb-3">
+      <div>
+        <h2 class="text-base sm:text-lg font-bold text-amber-400 flex items-center gap-1.5">
+          <span>🪔</span> દિવાળી Reel & Story Animation
+        </h2>
+        <p class="text-xs text-[var(--muted-foreground)]">લાઈવ એનિમેશન અને વિડીયો ડાઉનલોડર</p>
+      </div>
+      <button id="soundBtn" class="px-3 py-1 text-xs rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition flex items-center gap-1">
+        <span id="soundIcon">🔇</span> <span id="soundText">Sound On</span>
+      </button>
+    </div>
+
+    <!-- Canvas Preview (9:16 Vertical Reel format) -->
+    <div class="relative w-full aspect-[9/16] max-h-[520px] rounded-xl overflow-hidden border border-amber-500/30 shadow-2xl bg-[#090615]">
+      <canvas id="diwaliCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+      
+      <!-- Interactive hint overlay -->
+      <div class="absolute top-2 left-2 right-2 flex justify-between pointer-events-none">
+        <span class="text-[11px] bg-black/60 backdrop-blur-sm text-amber-200 px-2 py-0.5 rounded-full border border-amber-500/20">✨ Tap canvas for fireworks</span>
+        <span id="recBadge" class="hidden text-[11px] bg-red-600/90 text-white font-semibold px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-white"></span> REC <span id="recTimer">0s</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Customization Form -->
+    <div class="w-full mt-4 space-y-3">
+      <div class="flex gap-2">
+        <input id="userNameInput" type="text" placeholder="તમારું નામ (દા.ત. Sahil Patel)" 
+          class="flex-1 bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs text-[var(--foreground)] focus:outline-none focus:border-amber-400" />
+        <button id="updateNameBtn" class="px-3 py-1.5 bg-amber-500 text-slate-950 font-semibold text-xs rounded-lg hover:bg-amber-400 transition">
+          અપડેટ
+        </button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-2 gap-2">
+        <button id="burstBtn" class="w-full py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 font-bold text-xs rounded-lg shadow hover:opacity-95 transition flex items-center justify-center gap-1.5">
+          <span>🎆</span> ફટાકડા ફોડો
+        </button>
+        <button id="recordBtn" class="w-full py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-xs rounded-lg shadow hover:opacity-95 transition flex items-center justify-center gap-1.5">
+          <span id="recIcon">🎥</span> <span id="recText">વિડીયો ડાઉનલોડ (Reel)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Instructions note -->
+    <p class="text-[11px] text-[var(--muted-foreground)] text-center mt-3">
+      💡 "વિડીયો ડાઉનલોડ" પર ક્લિક કરતાં 7 સેકન્ડનું Reel શૂટ થઈને આપમેળે તમારા કમ્પ્યુટર પર સેવ થઈ જશે!
+    </p>
+
+  </div>
+
+  <script>
+    const canvas = document.getElementById('diwaliCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Set internal resolution for crisp video
+    const W = 720;
+    const H = 1280;
+    canvas.width = W;
+    canvas.height = H;
+
+    let customName = "";
+    let isSoundOn = false;
+    let audioCtx = null;
+
+    // Stars
+    const stars = [];
+    for (let i = 0; i < 90; i++) {
+      stars.push({
+        x: Math.random() * W,
+        y: Math.random() * (H * 0.75),
+        r: Math.random() * 2 + 0.8,
+        phase: Math.random() * Math.PI * 2,
+        speed: Math.random() * 0.05 + 0.02
+      });
+    }
+
+    // Floating diyas/sparks
+    const floatingSparks = [];
+    for (let i = 0; i < 30; i++) {
+      floatingSparks.push({
+        x: W / 2 + (Math.random() - 0.5) * 200,
+        y: H * 0.72 + Math.random() * 100,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -Math.random() * 2 - 1,
+        life: Math.random() * 100,
+        maxLife: 100 + Math.random() * 60,
+        size: Math.random() * 2.5 + 1.2
+      });
+    }
+
+    // Fireworks particles
+    const fireworks = [];
+    const colors = ['#FF4D4D', '#FFD700', '#FF7F50', '#00FFFF', '#FF69B4', '#7FFF00', '#FFBF00'];
+
+    function playCrackerSound() {
+      if (!isSoundOn) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // White noise burst for firework pop
+        const bufferSize = audioCtx.sampleRate * 0.35;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.08));
+        }
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+
+        // Bandpass filter for festive pop tone
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 800 + Math.random() * 1200;
+        filter.Q.value = 1.2;
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start();
+      } catch (e) {}
+    }
+
+    function createFirework(x, y, count = 60, baseColor = null) {
+      const color = baseColor || colors[Math.floor(Math.random() * colors.length)];
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 9 + 2;
+        fireworks.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: color,
+          alpha: 1,
+          decay: Math.random() * 0.018 + 0.012,
+          radius: Math.random() * 3 + 1.5
+        });
+      }
+      playCrackerSound();
+    }
+
+    // Auto fireworks timer
+    let autoFwTick = 0;
+
+    let time = 0;
+    function animate() {
+      time += 0.04;
+      ctx.fillStyle = '#080518';
+      ctx.fillRect(0, 0, W, H);
+
+      // Night sky gradient
+      const bgGrad = ctx.createRadialGradient(W / 2, H * 0.65, 50, W / 2, H / 2, H);
+      bgGrad.addColorStop(0, '#24103a');
+      bgGrad.addColorStop(0.5, '#120926');
+      bgGrad.addColorStop(1, '#05020c');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stars
+      for (let s of stars) {
+        const alpha = (Math.sin(time * 2 + s.phase) + 1) / 2 * 0.8 + 0.2;
+        ctx.fillStyle = `rgba(255, 245, 200, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Auto fireworks
+      autoFwTick++;
+      if (autoFwTick % 45 === 0) {
+        createFirework(
+          W * 0.15 + Math.random() * (W * 0.7),
+          H * 0.15 + Math.random() * (H * 0.35)
+        );
+      }
+
+      // Update & Draw Fireworks
+      for (let i = fireworks.length - 1; i >= 0; i--) {
+        const p = fireworks[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12; // gravity
+        p.vx *= 0.97;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          fireworks.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Floating sparks rising from Diya
+      for (let sp of floatingSparks) {
+        sp.x += sp.vx;
+        sp.y += sp.vy;
+        sp.life++;
+        if (sp.life >= sp.maxLife || sp.y < H * 0.2) {
+          sp.x = W / 2 + (Math.random() - 0.5) * 160;
+          sp.y = H * 0.72 + Math.random() * 30;
+          sp.life = 0;
+        }
+        const alpha = Math.sin((sp.life / sp.maxLife) * Math.PI) * 0.85;
+        ctx.fillStyle = `rgba(255, 215, 80, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Main Diya Setup
+      const diyaX = W / 2;
+      const diyaY = H * 0.72;
+      const flicker = Math.sin(time * 6) * 0.08 + Math.cos(time * 11) * 0.05 + 1;
+
+      // Glow behind Diya
+      const auraGrad = ctx.createRadialGradient(diyaX, diyaY - 30, 10, diyaX, diyaY - 30, 220 * flicker);
+      auraGrad.addColorStop(0, 'rgba(255, 170, 0, 0.55)');
+      auraGrad.addColorStop(0.35, 'rgba(255, 90, 0, 0.25)');
+      auraGrad.addColorStop(1, 'rgba(255, 60, 0, 0)');
+      ctx.fillStyle = auraGrad;
+      ctx.beginPath();
+      ctx.arc(diyaX, diyaY - 30, 220 * flicker, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rangoli / Decorative base
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(diyaX, diyaY + 45, 160, 45, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 105, 180, 0.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(diyaX, diyaY + 52, 130, 35, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Diya clay body
+      ctx.fillStyle = '#b84e18';
+      ctx.beginPath();
+      ctx.ellipse(diyaX, diyaY + 10, 95, 48, 0, 0, Math.PI);
+      ctx.fill();
+
+      // Golden Rim
+      const rimGrad = ctx.createLinearGradient(diyaX - 95, diyaY, diyaX + 95, diyaY);
+      rimGrad.addColorStop(0, '#ffd700');
+      rimGrad.addColorStop(0.5, '#fff1a8');
+      rimGrad.addColorStop(1, '#ff9900');
+      ctx.strokeStyle = rimGrad;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(diyaX, diyaY + 10, 95, 28, 0, 0, Math.PI);
+      ctx.stroke();
+
+      // Oil pool inside diya
+      ctx.fillStyle = '#5c2207';
+      ctx.beginPath();
+      ctx.ellipse(diyaX, diyaY + 8, 80, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Wick
+      ctx.strokeStyle = '#291104';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(diyaX, diyaY + 10);
+      ctx.lineTo(diyaX, diyaY - 10);
+      ctx.stroke();
+
+      // Flickering Flame (Multi-layer)
+      const flameH = 65 * flicker;
+      const flameW = 26 * (1 + Math.sin(time * 8) * 0.1);
+
+      // Outer orange flame
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 80, 0, 0.9)';
+      ctx.shadowColor = '#ff4500';
+      ctx.shadowBlur = 25;
+      ctx.beginPath();
+      ctx.moveTo(diyaX, diyaY - flameH - 10);
+      ctx.bezierCurveTo(diyaX + flameW, diyaY - flameH * 0.4, diyaX + flameW * 0.8, diyaY + 4, diyaX, diyaY + 6);
+      ctx.bezierCurveTo(diyaX - flameW * 0.8, diyaY + 4, diyaX - flameW, diyaY - flameH * 0.4, diyaX, diyaY - flameH - 10);
+      ctx.fill();
+
+      // Mid yellow flame
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.moveTo(diyaX, diyaY - flameH * 0.85);
+      ctx.bezierCurveTo(diyaX + flameW * 0.6, diyaY - flameH * 0.35, diyaX + flameW * 0.5, diyaY, diyaX, diyaY + 2);
+      ctx.bezierCurveTo(diyaX - flameW * 0.5, diyaY, diyaX - flameW * 0.6, diyaY - flameH * 0.35, diyaX, diyaY - flameH * 0.85);
+      ctx.fill();
+
+      // Inner white-hot flame
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(diyaX, diyaY - flameH * 0.55);
+      ctx.bezierCurveTo(diyaX + flameW * 0.28, diyaY - flameH * 0.2, diyaX + flameW * 0.25, diyaY - 2, diyaX, diyaY);
+      ctx.bezierCurveTo(diyaX - flameW * 0.25, diyaY - 2, diyaX - flameW * 0.28, diyaY - flameH * 0.2, diyaX, diyaY - flameH * 0.55);
+      ctx.fill();
+      ctx.restore();
+
+      // Text Overlays
+      ctx.textAlign = 'center';
+      
+      // Top Emoji & Greeting
+      ctx.font = '52px sans-serif';
+      ctx.fillText('🪔', diyaX, 130);
+
+      // English Title
+      ctx.font = 'bold 54px sans-serif';
+      ctx.fillStyle = '#ffdf66';
+      ctx.shadowColor = '#ffaa00';
+      ctx.shadowBlur = 15;
+      ctx.fillText('HAPPY DIWALI', diyaX, 200);
+
+      // Gujarati Greeting
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ff6b81';
+      ctx.shadowBlur = 10;
+      ctx.fillText('✨ શુભ દીપાવલી ✨', diyaX, 260);
+
+      // Bottom Quotes & Custom Name
+      ctx.shadowBlur = 0;
+      ctx.font = '24px sans-serif';
+      ctx.fillStyle = 'rgba(240, 240, 240, 0.88)';
+      ctx.fillText('May your life shine with peace & joy', diyaX, H * 0.86);
+
+      ctx.font = 'bold 32px sans-serif';
+      ctx.fillStyle = '#ffd700';
+      ctx.shadowColor = '#ff9900';
+      ctx.shadowBlur = 10;
+      ctx.fillText('✨ Saal Mubarak 2026 ✨', diyaX, H * 0.91);
+
+      if (customName) {
+        ctx.font = 'bold 28px sans-serif';
+        ctx.fillStyle = '#ff7675';
+        ctx.shadowColor = '#d63031';
+        ctx.shadowBlur = 8;
+        ctx.fillText(`— ${customName} —`, diyaX, H * 0.96);
+      }
+
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+
+    // Click canvas to spawn fireworks
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+      createFirework(x, y, 75);
+    });
+
+    // Sound button toggle
+    const soundBtn = document.getElementById('soundBtn');
+    const soundIcon = document.getElementById('soundIcon');
+    const soundText = document.getElementById('soundText');
+    soundBtn.addEventListener('click', () => {
+      isSoundOn = !isSoundOn;
+      soundIcon.textContent = isSoundOn ? '🔊' : '🔇';
+      soundText.textContent = isSoundOn ? 'Sound Off' : 'Sound On';
+      if (isSoundOn) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        createFirework(W / 2, H * 0.3, 50);
+      }
+    });
+
+    // Burst button
+    document.getElementById('burstBtn').addEventListener('click', () => {
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          createFirework(
+            W * 0.2 + Math.random() * (W * 0.6),
+            H * 0.15 + Math.random() * (H * 0.3)
+          );
+        }, i * 200);
+      }
+    });
+
+    // Update Name
+    document.getElementById('updateNameBtn').addEventListener('click', () => {
+      const input = document.getElementById('userNameInput');
+      customName = input.value.trim();
+      createFirework(W / 2, H * 0.4, 60, '#FFD700');
+    });
+
+    // Record & Download Video
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    const recordBtn = document.getElementById('recordBtn');
+    const recBadge = document.getElementById('recBadge');
+    const recTimer = document.getElementById('recTimer');
+    const recText = document.getElementById('recText');
+
+    recordBtn.addEventListener('click', () => {
+      if (isRecording) return;
+      isRecording = true;
+      recordBtn.disabled = true;
+      recText.textContent = "રેકોર્ડિંગ શરૂ છે...";
+      recBadge.classList.remove('hidden');
+
+      // Create stream
+      const stream = canvas.captureStream(30);
+      recordedChunks = [];
+
+      try {
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+          ? 'video/webm;codecs=vp9' 
+          : 'video/webm';
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Diwali_Greeting_Reel_${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        isRecording = false;
+        recordBtn.disabled = false;
+        recBadge.classList.add('hidden');
+        recText.textContent = "વિડીયો ડાઉનલોડ (Reel)";
+      };
+
+      mediaRecorder.start();
+
+      let seconds = 7;
+      recTimer.textContent = `${seconds}s`;
+      const interval = setInterval(() => {
+        seconds--;
+        if (seconds > 0) {
+          recTimer.textContent = `${seconds}s`;
+          if (seconds % 2 === 0) {
+            createFirework(
+              W * 0.2 + Math.random() * (W * 0.6),
+              H * 0.2 + Math.random() * (H * 0.25)
+            );
+          }
+        } else {
+          clearInterval(interval);
+          mediaRecorder.stop();
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
